@@ -10,28 +10,25 @@
 class Snake {
 public:
     Snake() : m_field(m_height, m_width) {
-        init_game();
-
         init_ncurses();
+        init_game();
     }
 
     ~Snake() {
-        delete[] m_snake;
-
         deinit_ncurses();
+        deinit_game();
     }
 
-    void play() {
+   void play() {
         render();
 
         int count = 0; // change this from counter to timer
-        int max_count = 20;
+        int max_count = 25;
         while (m_state != ENDING) {
-            usleep(1000*20);
+            usleep(1000 * 250 / max_count);
 
             switch(m_state) {
                 case INITIAL:
-                    init_game();
                     get_user_input();
                     break;
                 case TWISTING:
@@ -41,13 +38,12 @@ public:
                     move_snake_forward();
                     break;
                 case PAUSE:
-                    get_user_input();
+                    get_user_input(); // ?
                     break;
                 case GAME_OVER:
                     get_user_input();
                     break;
                 case ENDING:
-                    continue;
                     break;
             }
 
@@ -82,7 +78,7 @@ private:
         DOWN,
         LEFT,
         RIGHT,
-    } direction{ UP };
+    } m_dir{ UP }, m_next_dir{ UP };
 
     int m_height{ 15 };
     int m_width{ 20 };
@@ -92,10 +88,13 @@ private:
     int m_size{ 0 };
     int m_max_size{ 10 };
 
-    void init_game() {
-        m_snake = new Point[m_max_size]{};
+    void reset_game() {
+        m_dir = UP;
+        m_next_dir = UP;
 
-        // snake grows from behind
+        m_snake[4].x = 7;
+        m_snake[4].y = 7;
+
         m_snake[3].x = 8;
         m_snake[3].y = 7;
 
@@ -108,11 +107,35 @@ private:
         m_snake[0].x = 10;
         m_snake[0].y = 6;
 
-        m_size = 4;
+        m_size = 5;
+    }
+
+    void init_game() {
+        m_snake = new Point[m_max_size]{};
+
+        // snake grows from behind
+        m_snake[4].x = 7;
+        m_snake[4].y = 7;
+
+        m_snake[3].x = 8;
+        m_snake[3].y = 7;
+
+        m_snake[2].x = 9;
+        m_snake[2].y = 7;
+
+        m_snake[1].x = 10;
+        m_snake[1].y = 7;
+
+        m_snake[0].x = 10;
+        m_snake[0].y = 6;
+
+        m_size = 5;
     }
 
     void deinit_game() {
-
+        if (m_snake != nullptr) {
+            delete[] m_snake;
+        }
     }
 
     void get_user_input() {
@@ -121,21 +144,57 @@ private:
         if (key == 'q') {
             m_state = ENDING;
         } else if (key == 'r') {
+            reset_game();
             m_state = INITIAL;
-        } else if (m_state == INITIAL && key == '\n') {
-            m_state = TWISTING;
-        } else {
-            // if (key == 'w') {
-            //     twist_snake_upward();
-            // } else if (key == 'a') {
-            //     twist_snake_left();
-            // } else if (key == 's') {
-            //     twist_snake_down();
-            // } else if (key == 'd') {
-            //     twist_snake_right();
-            // }
+        } else if (m_state == INITIAL) {
+            if (key == '\n') {
+                m_state = TWISTING;
+            }
+        } else if (m_state == TWISTING) {
+            if (key == 'w' || key == 'a' || key == 's' || key == 'd') {
+                twist_snake(key);
+            }
+        }
+    }
+    
+    void twist_snake(char key) {
+        if (m_dir != m_next_dir) { // not first twist on this step
+            return;
         }
 
+        if (key == 'w') {
+            twist_snake_upward();
+        } else if (key == 'a') {
+            twist_snake_left();
+        } else if (key == 's') {
+            twist_snake_down();
+        } else if (key == 'd') {
+            twist_snake_right();
+        }
+    }
+
+    void twist_snake_upward() {
+        if (m_dir != DOWN) {
+            m_next_dir = UP;
+        }
+    }
+
+    void twist_snake_left() {
+        if (m_dir != RIGHT) {
+            m_next_dir = LEFT;
+        }
+    }
+
+    void twist_snake_down() {
+        if (m_dir != UP) {
+            m_next_dir = DOWN;
+        }
+    }
+
+    void twist_snake_right() {
+        if (m_dir != LEFT) {
+            m_next_dir = RIGHT;
+        }
     }
 
     void move_snake_forward() {
@@ -146,19 +205,28 @@ private:
 
         Point& head = m_snake[0];
 
-        if (direction == UP) {
+        if (m_next_dir == UP) {
             head.y -= 1;
-        } else if (direction == DOWN) {
+        } else if (m_next_dir == DOWN) {
             head.y += 1;
-        } else if (direction == LEFT) {
+        } else if (m_next_dir == LEFT) {
             head.x -= 1;
-        } else if (direction == RIGHT) {
+        } else if (m_next_dir == RIGHT) {
             head.x += 1;
         }
+
+        m_dir = m_next_dir;
 
         if (head.x == 0 || head.x == m_width - 1 || head.y == 0 || head.y == m_height - 1) {
             m_state = GAME_OVER;
         } else {
+            for (int i = 1; i < m_size; ++i) {
+                if (head.x == m_snake[i].x && head.y == m_snake[i].y) {
+                    m_state = GAME_OVER;
+                    return;
+                }
+            }
+
             m_state = TWISTING;
         }
     }
@@ -193,8 +261,8 @@ private:
             mvwprintw(game_window, 3, 2, "[R]          to restart");
             mvwprintw(game_window, 4, 2, "[Q]          to quit");
             mvwprintw(game_window, get_center_y(), get_center_x(7), "[START]"); 
-        } else if (m_state == GAME_OVER) {
-            mvwprintw(game_window, get_center_y(), get_center_x(11), "[GAME_OVER]");
+        // } else if (m_state == GAME_OVER) {
+        //     mvwprintw(game_window, get_center_y(), get_center_x(11), "[GAME_OVER]");
         } else if (m_state == PAUSE) {
             mvwprintw(game_window, get_center_y(), get_center_x(7), "[PAUSE]");
         } else {
@@ -206,6 +274,10 @@ private:
                         mvwprintw(game_window, i + 1, 3 * j + 1, "   ");
                     }
                 }
+            }
+
+            if (m_state == GAME_OVER) {
+                mvwprintw(game_window, get_center_y(), get_center_x(11), "[GAME_OVER]");
             }
         }
 
