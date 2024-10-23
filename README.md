@@ -2,8 +2,6 @@
 First attemp to implement Snake game in C++ (Based on Tetris2 project)
 
 ### TODO
-- Handle Pause logic -- DONE
-- Rework game logic -- Time logic DONE
-- Add second panel with score, level, contols, etc.
-- Add levels to the game
-- Add mechanics to let snake grow
+- Growth mechanic (randomly spawning apples on the field)
+- Colors for different types of objects
+- Right side panel with contorls and other stuff (?)

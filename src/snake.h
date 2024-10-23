@@ -2,8 +2,9 @@
 #define SNAKE_H
 
 #include <ncurses.h>
+#include <iostream>
+#include <cstdio>
 #include <string>
-
 #include <chrono>
 #include <thread>
 
@@ -11,9 +12,10 @@
 
 class Snake {
 private:
-    const std::string m_block = "[+]";
-    const int c_ticks{ 25 };
-    const std::chrono::milliseconds c_speed{ 250 / c_ticks };
+    const int c_ticks{ 25 }; // number of ticks between each shift
+    const int c_speed{ 250 }; // time between each shift in ms
+
+    const std::chrono::milliseconds c_tick_duration{ c_speed / c_ticks };
 
     struct Point {
         int x{ 0 };
@@ -22,8 +24,7 @@ private:
 
     enum States {
         INITIAL,
-        TWISTING, // handling user input (wasd)
-        MOVING, // snake moves one block forward
+        TWISTING,
         PAUSE,
         GAME_OVER,
         ENDING,
@@ -34,7 +35,9 @@ private:
         DOWN,
         LEFT,
         RIGHT,
-    } m_dir{ UP }, m_next_dir{ UP };
+    } m_dir{ RIGHT }, m_next_dir{ RIGHT };
+
+    int m_level{ 0 };
 
     int m_height{ 15 };
     int m_width{ 20 };
@@ -58,32 +61,14 @@ public:
    void play() {
         render();
 
-        int count = 0; // change this from counter to timer
+        int count = 0;
         while (m_state != ENDING) {
-            std::this_thread::sleep_for(c_speed);
+            std::this_thread::sleep_for(c_tick_duration);
 
-            switch(m_state) {
-                case INITIAL:
-                    get_user_input();
-                    break;
-                case TWISTING:
-                    get_user_input();
-                    break;
-                case MOVING:
-                    move_snake_forward();
-                    break;
-                case PAUSE:
-                    get_user_input();
-                    break;
-                case GAME_OVER:
-                    get_user_input();
-                    break;
-                case ENDING:
-                    break;
-            }
+            get_user_input();
 
             if (m_state == TWISTING && ++count == c_ticks) {
-                m_state = MOVING;
+                move_snake_forward();
                 count = 0;
             }
 
@@ -92,54 +77,57 @@ public:
     }
 
 private:
+    void terminate() {
+        deinit_game();
+        deinit_ncurses();
+        exit(1);
+    }
+
     void reset_game() {
-        m_dir = UP;
-        m_next_dir = UP;
+        // load level
+        FILE* file = fopen("./levels/level_0.txt", "r"); // get file name!!!
 
-        m_snake[4].x = 7;
-        m_snake[4].y = 7;
+        if (file == nullptr) {
+            std::cerr << "Error opening file!" << std::endl;
+            terminate();
+        }
 
-        m_snake[3].x = 8;
-        m_snake[3].y = 7;
+        for (int i = 0; i < m_height; ++i) {
+            for (int j = 0; j < m_width; ++j) {
+                if(fscanf(file, "%d", &m_field(i, j)) != 1) {
+                    std::cerr << "Error reading data!" << std::endl;
+                    fclose(file);
+                    terminate();
+                }
+            }
+        }
 
-        m_snake[2].x = 9;
+        fclose(file);
+
+        // create snake
+        m_dir = RIGHT;
+        m_next_dir = RIGHT;
+
+        m_snake[2].x = 5;
         m_snake[2].y = 7;
 
-        m_snake[1].x = 10;
+        m_snake[1].x = 6;
         m_snake[1].y = 7;
 
-        m_snake[0].x = 10;
-        m_snake[0].y = 6;
+        m_snake[0].x = 7;
+        m_snake[0].y = 7;
 
-        m_size = 5;
+        m_size = 3;
     }
 
     void init_game() {
         m_snake = new Point[m_max_size]{};
 
-        // snake grows from behind
-        m_snake[4].x = 7;
-        m_snake[4].y = 7;
-
-        m_snake[3].x = 8;
-        m_snake[3].y = 7;
-
-        m_snake[2].x = 9;
-        m_snake[2].y = 7;
-
-        m_snake[1].x = 10;
-        m_snake[1].y = 7;
-
-        m_snake[0].x = 10;
-        m_snake[0].y = 6;
-
-        m_size = 5;
+        reset_game();
     }
 
     void deinit_game() {
-        if (m_snake != nullptr) {
-            delete[] m_snake;
-        }
+        delete[] m_snake;
     }
 
     void get_user_input() {
@@ -154,7 +142,7 @@ private:
             if (key == '\n') {
                 m_state = TWISTING;
             }
-        } else if (key == 'p') {
+        } else if (m_state != GAME_OVER && key == 'p') {
             m_state = (m_state != PAUSE) ? PAUSE : TWISTING;
         } else if (m_state == TWISTING) {
             if (key == 'w' || key == 'a' || key == 's' || key == 'd') {
@@ -168,14 +156,11 @@ private:
             return;
         }
 
-        if (key == 'w') {
-            twist_snake_upward();
-        } else if (key == 'a') {
-            twist_snake_left();
-        } else if (key == 's') {
-            twist_snake_down();
-        } else if (key == 'd') {
-            twist_snake_right();
+        switch (key) {
+            case 'w': twist_snake_upward(); break;
+            case 'a': twist_snake_left(); break;
+            case 's': twist_snake_down(); break;
+            case 'd': twist_snake_right(); break;
         }
     }
 
@@ -203,7 +188,21 @@ private:
         }
     }
 
+    Point* get_snake_copy() {
+        Point* snake = new Point[m_size]{};
+
+        for (int i = 0; i < m_size; ++i) {
+            snake[i].x = m_snake[i].x;
+            snake[i].y = m_snake[i].y;
+        }
+
+        return snake;
+    }
+
     void move_snake_forward() {
+        Point* old_snake = get_snake_copy();
+
+        // move each snake block forward to the head
         for (int i = m_size - 1; i > 0; --i) {
             m_snake[i].x = m_snake[i - 1].x;
             m_snake[i].y = m_snake[i - 1].y;
@@ -211,6 +210,7 @@ private:
 
         Point& head = m_snake[0];
 
+        // move head to the chosen direction
         if (m_next_dir == UP) {
             head.y -= 1;
         } else if (m_next_dir == DOWN) {
@@ -223,11 +223,25 @@ private:
 
         m_dir = m_next_dir;
 
+        // did snake crash with the playing field border?
         if (head.x == 0 || head.x == m_width - 1 || head.y == 0 || head.y == m_height - 1) {
+            // here we test before the collision happens so there is no need to restore snake before shifting
             m_state = GAME_OVER;
-        } else {
-            for (int i = 1; i < m_size; ++i) {
-                if (head.x == m_snake[i].x && head.y == m_snake[i].y) {
+        }
+        else {
+            for (int i = 0; i < m_size; ++i) {
+                // did snake bite itself?
+                if ((i >= 1 && head.x == m_snake[i].x && head.y == m_snake[i].y) ||
+                    // or did it collide with some obstacle on the field?
+                    (m_field(m_snake[i].y, m_snake[i].x))) {
+
+                    // here we need to restore snake to the original state because it moved into
+                    // an other object
+
+                    delete[] m_snake;
+
+                    m_snake = old_snake;
+
                     m_state = GAME_OVER;
                     return;
                 }
@@ -235,10 +249,6 @@ private:
 
             m_state = TWISTING;
         }
-    }
-
-    void end_game() {
-        
     }
 
     void add_snake_to_field() {
@@ -254,7 +264,7 @@ private:
     }
 
     void render() {
-        if (m_state != INITIAL) { add_snake_to_field(); }
+        // if (m_state != INITIAL) { add_snake_to_field(); }
 
         WINDOW *game_window = newwin(m_height + 2, 3 * m_width + 2, 0, 0);
 
@@ -271,11 +281,15 @@ private:
             for (int i = 0; i < m_height; ++i) {
                 for (int j = 0; j < m_width; ++j) {
                     if (m_field(i, j) == 1) {
-                        mvwprintw(game_window, i + 1, 3 * j + 1, "[+]");
+                        mvwprintw(game_window, i + 1, 3 * j + 1, "[ ]");
                     } else {
                         mvwprintw(game_window, i + 1, 3 * j + 1, "   ");
                     }
                 }
+            }
+
+            for (int i = 0; i < m_size; ++i) {
+                mvwprintw(game_window, m_snake[i].y + 1, 3 * m_snake[i].x + 1, "[-]");
             }
 
             if (m_state == GAME_OVER) {
@@ -289,11 +303,11 @@ private:
 
         delwin(game_window);
 
-        if (m_state != INITIAL) { remove_snake_from_field(); }
+        // if (m_state != INITIAL) { remove_snake_from_field(); }
     }
 
     int get_center_x(int length) {
-        return (m_width * m_block.size() + 2 + 1 - length) / 2;
+        return (m_width * 3 + 2 + 1 - length) / 2;
     }
 
     int get_center_y() {
