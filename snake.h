@@ -2,62 +2,18 @@
 #define SNAKE_H
 
 #include <ncurses.h>
-#include <unistd.h>
-#include <string.h>
+#include <string>
+
+#include <chrono>
+#include <thread>
 
 #include "matrix.h"
 
 class Snake {
-public:
-    Snake() : m_field(m_height, m_width) {
-        init_ncurses();
-        init_game();
-    }
-
-    ~Snake() {
-        deinit_ncurses();
-        deinit_game();
-    }
-
-   void play() {
-        render();
-
-        int count = 0; // change this from counter to timer
-        int max_count = 25;
-        while (m_state != ENDING) {
-            usleep(1000 * 250 / max_count);
-
-            switch(m_state) {
-                case INITIAL:
-                    get_user_input();
-                    break;
-                case TWISTING:
-                    get_user_input();
-                    break;
-                case MOVING:
-                    move_snake_forward();
-                    break;
-                case PAUSE:
-                    get_user_input(); // ?
-                    break;
-                case GAME_OVER:
-                    get_user_input();
-                    break;
-                case ENDING:
-                    break;
-            }
-
-            if (m_state == TWISTING && ++count == max_count) {
-                m_state = MOVING;
-                count = 0;
-            }
-
-            render();
-        }
-    }
-
 private:
-    std::string m_block = "[+]";
+    const std::string m_block = "[+]";
+    const int c_ticks{ 25 };
+    const std::chrono::milliseconds c_speed{ 250 / c_ticks };
 
     struct Point {
         int x{ 0 };
@@ -88,6 +44,54 @@ private:
     int m_size{ 0 };
     int m_max_size{ 10 };
 
+public:
+    Snake() : m_field(m_height, m_width) {
+        init_ncurses();
+        init_game();
+    }
+
+    ~Snake() {
+        deinit_ncurses();
+        deinit_game();
+    }
+
+   void play() {
+        render();
+
+        int count = 0; // change this from counter to timer
+        while (m_state != ENDING) {
+            std::this_thread::sleep_for(c_speed);
+
+            switch(m_state) {
+                case INITIAL:
+                    get_user_input();
+                    break;
+                case TWISTING:
+                    get_user_input();
+                    break;
+                case MOVING:
+                    move_snake_forward();
+                    break;
+                case PAUSE:
+                    get_user_input();
+                    break;
+                case GAME_OVER:
+                    get_user_input();
+                    break;
+                case ENDING:
+                    break;
+            }
+
+            if (m_state == TWISTING && ++count == c_ticks) {
+                m_state = MOVING;
+                count = 0;
+            }
+
+            render();
+        }
+    }
+
+private:
     void reset_game() {
         m_dir = UP;
         m_next_dir = UP;
@@ -150,6 +154,8 @@ private:
             if (key == '\n') {
                 m_state = TWISTING;
             }
+        } else if (key == 'p') {
+            m_state = (m_state != PAUSE) ? PAUSE : TWISTING;
         } else if (m_state == TWISTING) {
             if (key == 'w' || key == 'a' || key == 's' || key == 'd') {
                 twist_snake(key);
@@ -261,10 +267,6 @@ private:
             mvwprintw(game_window, 3, 2, "[R]          to restart");
             mvwprintw(game_window, 4, 2, "[Q]          to quit");
             mvwprintw(game_window, get_center_y(), get_center_x(7), "[START]"); 
-        // } else if (m_state == GAME_OVER) {
-        //     mvwprintw(game_window, get_center_y(), get_center_x(11), "[GAME_OVER]");
-        } else if (m_state == PAUSE) {
-            mvwprintw(game_window, get_center_y(), get_center_x(7), "[PAUSE]");
         } else {
             for (int i = 0; i < m_height; ++i) {
                 for (int j = 0; j < m_width; ++j) {
@@ -278,6 +280,8 @@ private:
 
             if (m_state == GAME_OVER) {
                 mvwprintw(game_window, get_center_y(), get_center_x(11), "[GAME_OVER]");
+            } else if (m_state == PAUSE) {
+                mvwprintw(game_window, get_center_y(), get_center_x(7), "[PAUSE]");
             }
         }
 
