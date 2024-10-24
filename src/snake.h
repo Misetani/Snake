@@ -48,7 +48,7 @@ private:
 
     Point* m_snake;
     int m_size{ 0 };
-    int m_max_size{ 10 };
+    int m_max_size{ 4 };
 
     int apple_x{ 0 };
     int apple_y{ 0 };
@@ -282,13 +282,25 @@ private:
 
         // Eating an apple?
         if (head.x == apple_x && head.y == apple_y) {
-            if (m_size <= m_max_size) {
-                m_snake[m_size].x = tail.x;
-                m_snake[m_size].y = tail.y;
-                ++m_size;
+            if (m_size == m_max_size) {
+                Point* new_snake = new Point[2 * m_max_size];
 
-                spawn_an_apple();
+                for (int i = 0; i < m_size; ++i) {
+                    new_snake[i] = m_snake[i]; // can I?
+                }
+
+                delete[] m_snake;
+
+                m_snake = new_snake;
+
+                m_max_size *= 2;
             }
+
+            m_snake[m_size].x = tail.x;
+            m_snake[m_size].y = tail.y;
+            ++m_size;
+
+            spawn_an_apple();
         }
     }
 
