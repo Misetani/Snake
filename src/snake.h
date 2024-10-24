@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "matrix.h"
+#include "rng.h"
 
 class Snake {
 private:
@@ -16,6 +17,8 @@ private:
     const int c_speed{ 250 }; // time between each shift in ms
 
     const std::chrono::milliseconds c_tick_duration{ c_speed / c_ticks };
+
+    RNG rng;
 
     struct Point {
         int x{ 0 };
@@ -86,9 +89,24 @@ private:
         exit(1);
     }
 
+    void spawn_an_apple() {
+        apple_x = rng.rand(0, m_width - 1);
+        apple_y = rng.rand(0, m_height - 1);
+
+        if (m_field(apple_y, apple_x) == 1) {
+            spawn_an_apple();
+        } else {
+            for (int i = 0; i < m_size; ++i) {
+                if (m_snake[i].x == apple_x && m_snake[i].y == apple_y) {
+                    spawn_an_apple();
+                }
+            }
+        }
+    }
+
     void reset_game() {
         // load level
-        FILE* file = fopen("./levels/level_0.txt", "r"); // get file name!!!
+        FILE* file = fopen("./levels/level_0.txt", "r");
 
         if (file == nullptr) {
             std::cerr << "Error opening file!" << std::endl;
@@ -107,10 +125,6 @@ private:
 
         fclose(file);
 
-        // An apple
-        apple_y = 11;
-        apple_x = 9;
-
         // create snake
         m_dir = RIGHT;
         m_next_dir = RIGHT;
@@ -125,6 +139,9 @@ private:
         m_snake[0].y = 7;
 
         m_size = 3;
+
+        // An apple
+        spawn_an_apple();
     }
 
     void init_game() {
@@ -270,8 +287,7 @@ private:
                 m_snake[m_size].y = tail.y;
                 ++m_size;
 
-                apple_x = 0;
-                apple_y = 0;
+                spawn_an_apple();
             }
         }
     }
