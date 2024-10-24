@@ -47,6 +47,9 @@ private:
     int m_size{ 0 };
     int m_max_size{ 10 };
 
+    int apple_x{ 0 };
+    int apple_y{ 0 };
+
 public:
     Snake() : m_field(m_height, m_width) {
         init_ncurses();
@@ -103,6 +106,10 @@ private:
         }
 
         fclose(file);
+
+        // An apple
+        apple_y = 11;
+        apple_x = 9;
 
         // create snake
         m_dir = RIGHT;
@@ -199,8 +206,32 @@ private:
         return snake;
     }
 
+    bool is_snake_dead() {
+        Point& head = m_snake[0];
+
+        // did snake crash with the playing field border?
+        if (head.x < 0 || head.x >= m_width || head.y < 0 || head.y >= m_height) {
+            return true;
+        }
+        else {
+            for (int i = 0; i < m_size; ++i) {
+                // did snake bite itself?
+                if ((i >= 1 && head.x == m_snake[i].x && head.y == m_snake[i].y) ||
+                    // or did it collide with some obstacle on the field?
+                    (m_field(m_snake[i].y, m_snake[i].x)) == 1) {
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     void move_snake_forward() {
         Point* old_snake = get_snake_copy();
+
+        Point tail = m_snake[m_size - 1];
 
         // move each snake block forward to the head
         for (int i = m_size - 1; i > 0; --i) {
@@ -223,50 +254,32 @@ private:
 
         m_dir = m_next_dir;
 
-        // did snake crash with the playing field border?
-        if (head.x == 0 || head.x == m_width - 1 || head.y == 0 || head.y == m_height - 1) {
-            // here we test before the collision happens so there is no need to restore snake before shifting
+        if (is_snake_dead()) {
+            delete[] m_snake;
+            m_snake = old_snake;
+
             m_state = GAME_OVER;
-        }
-        else {
-            for (int i = 0; i < m_size; ++i) {
-                // did snake bite itself?
-                if ((i >= 1 && head.x == m_snake[i].x && head.y == m_snake[i].y) ||
-                    // or did it collide with some obstacle on the field?
-                    (m_field(m_snake[i].y, m_snake[i].x))) {
-
-                    // here we need to restore snake to the original state because it moved into
-                    // an other object
-
-                    delete[] m_snake;
-
-                    m_snake = old_snake;
-
-                    m_state = GAME_OVER;
-                    return;
-                }
-            }
-
+        } else {
             m_state = TWISTING;
         }
-    }
 
-    void add_snake_to_field() {
-        for (int i = 0; i < m_size; ++i) {
-            m_field(m_snake[i].y, m_snake[i].x) = 1;
-        }
-    }
+        // Eating an apple?
+        if (head.x == apple_x && head.y == apple_y) {
+            if (m_size <= m_max_size) {
+                m_snake[m_size].x = tail.x;
+                m_snake[m_size].y = tail.y;
+                ++m_size;
 
-    void remove_snake_from_field() {
-        for (int i = 0; i < m_size; ++i) {
-            m_field(m_snake[i].y, m_snake[i].x) = 0;
+                apple_x = 0;
+                apple_y = 0;
+            }
         }
     }
 
     void render() {
-        // if (m_state != INITIAL) { add_snake_to_field(); }
-
-        WINDOW *game_window = newwin(m_height + 2, 3 * m_width + 2, 0, 0);
+        int height = m_height + 2;
+        int width = 3 * m_width + 2;
+        WINDOW *game_window = newwin(height, width, 0, 0);
 
         refresh();
         box(game_window, 0, 0);
@@ -276,7 +289,7 @@ private:
             mvwprintw(game_window, 2, 2, "[W][A][S][D] to move");
             mvwprintw(game_window, 3, 2, "[R]          to restart");
             mvwprintw(game_window, 4, 2, "[Q]          to quit");
-            mvwprintw(game_window, get_center_y(), get_center_x(7), "[START]"); 
+            mvwprintw(game_window, height / 2, (width + 1 - 7) / 2, "[START]");
         } else {
             for (int i = 0; i < m_height; ++i) {
                 for (int j = 0; j < m_width; ++j) {
@@ -292,26 +305,18 @@ private:
                 mvwprintw(game_window, m_snake[i].y + 1, 3 * m_snake[i].x + 1, "[-]");
             }
 
+            mvwprintw(game_window, apple_y + 1, 3 * apple_x + 1, "[+]");
+
             if (m_state == GAME_OVER) {
-                mvwprintw(game_window, get_center_y(), get_center_x(11), "[GAME_OVER]");
+                mvwprintw(game_window, height / 2, (width + 1 - 11) / 2, "[GAME_OVER]");
             } else if (m_state == PAUSE) {
-                mvwprintw(game_window, get_center_y(), get_center_x(7), "[PAUSE]");
+                mvwprintw(game_window, height / 2, (width + 1 - 7) / 2, "[PAUSE]");
             }
         }
 
         wrefresh(game_window);
 
         delwin(game_window);
-
-        // if (m_state != INITIAL) { remove_snake_from_field(); }
-    }
-
-    int get_center_x(int length) {
-        return (m_width * 3 + 2 + 1 - length) / 2;
-    }
-
-    int get_center_y() {
-        return m_height / 2 + 1;
     }
 
     void init_ncurses() {
